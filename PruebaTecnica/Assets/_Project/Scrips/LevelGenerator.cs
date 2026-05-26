@@ -16,17 +16,47 @@ public class LevelGenerator : MonoBehaviour
     }
 
     [Header("Level Pieces")]
-    public List<PieceSpawnData> pieces =
-        new List<PieceSpawnData>();
+    public List<PieceSpawnData> pieces = new List<PieceSpawnData>();
+
+    [Header("Generation Settings")]
+    public int maxAttempts = 50;
 
     void Start()
     {
-        Debug.Log("LevelGenerator ejecutando");
-
         GenerateLevel();
     }
 
+    // =========================
+    // MAIN GENERATION FLOW
+    // =========================
     void GenerateLevel()
+    {
+        int attempts = 0;
+        bool validLevel = false;
+
+        while (!validLevel && attempts < maxAttempts)
+        {
+            attempts++;
+
+            ClearLevel();
+            SpawnAllPieces();
+
+            validLevel = RuleManager.Instance.HasValidSimulation();
+        }
+
+        if (!validLevel)
+        {
+            Debug.LogError("No se pudo generar un nivel válido tras varios intentos.");
+            return;
+        }
+
+        Debug.Log($"Nivel generado correctamente en {attempts} intentos.");
+    }
+
+    // =========================
+    // SPAWN SYSTEM
+    // =========================
+    void SpawnAllPieces()
     {
         foreach (var data in pieces)
         {
@@ -36,38 +66,36 @@ public class LevelGenerator : MonoBehaviour
 
     void SpawnPiece(PieceSpawnData data)
     {
-        GameObject obj =
-            Instantiate(piecePrefab);
+        GameObject obj = Instantiate(piecePrefab);
 
-        Pieza pieza =
-            obj.GetComponent<Pieza>();
+        Pieza pieza = obj.GetComponent<Pieza>();
 
         if (pieza == null)
         {
-            Debug.LogError(
-                "Prefab no tiene script Pieza"
-            );
-
+            Debug.LogError("El prefab no tiene el script Pieza");
             return;
         }
 
-        // GRID
-        GridManager.Instance.PlacePiece(
-            pieza,
-            data.position
-        );
+        // 1. Colocar en grid
+        RuleManager.Instance.PlacePiece(pieza, data.position);
 
-        // VISUAL
-        pieza.SetBlockPrefab(
-            data.blockPrefab
-        );
+        // 2. Visual
+        pieza.SetBlockPrefab(data.blockPrefab);
 
-        // RANDOM DIRECTION
+        // 3. Dirección aleatoria (IMPORTANTE: antes de simular)
         pieza.Initialize();
+    }
 
-        Debug.Log(
-            "Spawning piece at: " +
-            data.position
-        );
+    // =========================
+    // CLEANUP
+    // =========================
+    void ClearLevel()
+    {
+        Pieza[] existingPieces = FindObjectsOfType<Pieza>();
+
+        foreach (var p in existingPieces)
+        {
+            Destroy(p.gameObject);
+        }
     }
 }

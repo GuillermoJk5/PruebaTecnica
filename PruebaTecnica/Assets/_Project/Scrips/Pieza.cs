@@ -1,5 +1,4 @@
 using UnityEngine;
-using static GridManager;
 
 public class Pieza : MonoBehaviour
 {
@@ -8,11 +7,9 @@ public class Pieza : MonoBehaviour
     // =========================
 
     private Vector3Int gridPosition;
-
     private MoveDirection direction;
 
     public Vector3Int GridPosition => gridPosition;
-
     public MoveDirection Direction => direction;
 
     // =========================
@@ -28,7 +25,6 @@ public class Pieza : MonoBehaviour
     // =========================
 
     private GameObject blockPrefab;
-
     private GameObject terrainInstance;
 
     // =========================
@@ -46,21 +42,14 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // INITIALIZE
+    // INIT
     // =========================
 
     public void Initialize()
     {
-      
         GenerateRandomDirection();
-        Debug.Log("DIR: " + direction);
         ApplyDirectionToSignals();
-        Debug.Log("DIR: " + direction);
     }
-
-    // =========================
-    // GRID SETTERS
-    // =========================
 
     public void SetGridPosition(Vector3Int pos)
     {
@@ -78,11 +67,7 @@ public class Pieza : MonoBehaviour
 
     void ApplyDirectionToSignals()
     {
-        if (signalsRoot == null)
-        {
-            Debug.LogWarning("SignalsRoot no asignado");
-            return;
-        }
+        if (signalsRoot == null) return;
 
         signalsRoot.localRotation = Quaternion.Euler(GetRotation(direction));
     }
@@ -91,63 +76,32 @@ public class Pieza : MonoBehaviour
     {
         switch (dir)
         {
-            case MoveDirection.Front:
-                return new Vector3Int(0, 0, 0); 
-
-            case MoveDirection.Right:
-                return new Vector3Int(0, 90, 0);
-
-            case MoveDirection.Back:
-                return new Vector3Int(0 , 180, 0);
-
-            case MoveDirection.Left:
-                return new Vector3Int(0, 270, 0);
-
-            case MoveDirection.Up:
-                return new Vector3Int(0, 0, 90);
-
-            case MoveDirection.Down:
-                return new Vector3Int(0, 0, 270);
-            default:
-                Debug.LogWarning("Error Switch");
-                return new Vector3Int(0, 0, 0);
+            case MoveDirection.Front: return new Vector3Int(0, 0, 0);
+            case MoveDirection.Right: return new Vector3Int(0, 90, 0);
+            case MoveDirection.Back: return new Vector3Int(0, 180, 0);
+            case MoveDirection.Left: return new Vector3Int(0, 270, 0);
+            case MoveDirection.Up: return new Vector3Int(0, 0, 90);
+            case MoveDirection.Down: return new Vector3Int(0, 0, 270);
+            default: return Vector3Int.zero;
         }
     }
 
-    public void ApplyRandomVisualDirection()
-    {
-        ApplyDirectionToSignals();
-    }
-
     // =========================
-    // VISUAL SYSTEM
+    // VISUAL
     // =========================
 
     public void SetBlockPrefab(GameObject newPrefab)
     {
         blockPrefab = newPrefab;
-
         SpawnVisual();
     }
 
     void SpawnVisual()
     {
-        if (visualRoot == null)
-        {
-            Debug.LogWarning("VisualRoot no asignado");
-            return;
-        }
-
-        if (blockPrefab == null)
-        {
-            Debug.LogWarning("BlockPrefab no asignado");
-            return;
-        }
+        if (visualRoot == null || blockPrefab == null) return;
 
         if (terrainInstance != null)
-        {
             Destroy(terrainInstance);
-        }
 
         terrainInstance = Instantiate(
             blockPrefab,
@@ -158,33 +112,17 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // GRID
-    // =========================
-
-    public void PlaceOnGrid(Vector3Int pos)
-    {
-        GridManager.Instance.PlacePiece(this, pos);
-    }
-
-
-    // =========================
-    // MOVE
-    // =========================
-
-    // =========================
-    // GRID
+    // MOVE INPUT
     // =========================
 
     private bool isMoving = false;
     private Vector3 moveDir;
-
-   
-
+    private float moveSpeed = 3f;
 
     private void OnMouseDown()
     {
         moveDir = GetMoveDirection();
-        isMoving = true; 
+        isMoving = true;
     }
 
     Vector3 GetMoveDirection()
@@ -192,34 +130,38 @@ public class Pieza : MonoBehaviour
         return signalsRoot.right.normalized;
     }
 
+    // =========================
+    // UPDATE MOVEMENT
+    // =========================
+
     private void Update()
     {
         if (!isMoving) return;
 
-        MoveResult result = GridManager.Instance.CheckMove(
+        var result = RuleManager.Instance.CheckMove(
             transform.position,
-            moveDir
+            moveDir,
+            2f //checkDistance
         );
 
         switch (result)
         {
-            case MoveResult.CanMove:
-                transform.position += moveDir * GridManager.Instance.pieceSpeed * Time.deltaTime;
+            case RuleManager.MoveResult.CanMove:
+                transform.position += moveDir * moveSpeed * Time.deltaTime;
                 break;
 
-            case MoveResult.BlockedByPiece:
+            case RuleManager.MoveResult.BlockedByPiece:
                 isMoving = false;
                 break;
 
-            case MoveResult.OutOfBounds:
+            case RuleManager.MoveResult.OutOfBounds:
                 Die();
                 break;
         }
     }
+
     void Die()
     {
         gameObject.SetActive(false);
     }
-
-   
 }
