@@ -1,4 +1,5 @@
 using UnityEngine;
+using static GridManager;
 
 public class Pieza : MonoBehaviour
 {
@@ -90,22 +91,22 @@ public class Pieza : MonoBehaviour
     {
         switch (dir)
         {
-            case MoveDirection.Up:
+            case MoveDirection.Front:
                 return new Vector3Int(0, 0, 0); 
 
             case MoveDirection.Right:
                 return new Vector3Int(0, 90, 0);
 
-            case MoveDirection.Down:
-                return new Vector3Int(0, 180, 0);
+            case MoveDirection.Back:
+                return new Vector3Int(0 , 180, 0);
 
             case MoveDirection.Left:
                 return new Vector3Int(0, 270, 0);
 
-            case MoveDirection.Front:
+            case MoveDirection.Up:
                 return new Vector3Int(0, 0, 90);
 
-            case MoveDirection.Back:
+            case MoveDirection.Down:
                 return new Vector3Int(0, 0, 270);
             default:
                 Debug.LogWarning("Error Switch");
@@ -165,44 +166,60 @@ public class Pieza : MonoBehaviour
         GridManager.Instance.PlacePiece(this, pos);
     }
 
+
+    // =========================
+    // MOVE
+    // =========================
+
+    // =========================
+    // GRID
+    // =========================
+
+    private bool isMoving = false;
+    private Vector3 moveDir;
+
+   
+
+
     private void OnMouseDown()
     {
-        TryMove();
+        moveDir = GetMoveDirection();
+        isMoving = true; 
     }
 
-    void TryMove()
+    Vector3 GetMoveDirection()
     {
-        Vector3Int dir = DirectionToVector(direction);
-        Debug.Log("Mover");
-        GridManager.Instance.SlidePiece(this, DirectionToVector(direction));
-
+        return signalsRoot.right.normalized;
     }
 
-    Vector3Int DirectionToVector(MoveDirection dir)
+    private void Update()
     {
-        switch (dir)
+        if (!isMoving) return;
+
+        MoveResult result = GridManager.Instance.CheckMove(
+            transform.position,
+            moveDir
+        );
+
+        switch (result)
         {
-            case MoveDirection.Up:
-                return new Vector3Int(0, 0, 1);
+            case MoveResult.CanMove:
+                transform.position += moveDir * GridManager.Instance.pieceSpeed * Time.deltaTime;
+                break;
 
-            case MoveDirection.Down:
-                return new Vector3Int(0, 0, -1);
+            case MoveResult.BlockedByPiece:
+                isMoving = false;
+                break;
 
-            case MoveDirection.Right:
-                return new Vector3Int(1, 0, 0);
-
-            case MoveDirection.Left:
-                return new Vector3Int(-1, 0, 0);
-
-            case MoveDirection.Front:
-                return new Vector3Int(0, 1, 0);
-
-            case MoveDirection.Back:
-                return new Vector3Int(0, -1, 0);
-
-            default:
-                return Vector3Int.zero;
+            case MoveResult.OutOfBounds:
+                Die();
+                break;
         }
     }
+    void Die()
+    {
+        gameObject.SetActive(false);
+    }
 
+   
 }
