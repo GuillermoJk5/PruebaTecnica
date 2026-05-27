@@ -3,23 +3,52 @@ using UnityEngine;
 
 public class LevelGenerator : MonoBehaviour
 {
+    // =========================
+    // PREFABS
+    // =========================
+
     [Header("Base Piece Prefab")]
     public GameObject piecePrefab;
+
+    // =========================
+    // LEVEL DATA
+    // =========================
 
     [System.Serializable]
     public class PieceSpawnData
     {
         public Vector3Int position;
-
-        [Header("Visual")]
-        public GameObject blockPrefab;
+        public GameObject customBlockPrefab;
     }
 
     [Header("Level Pieces")]
     public List<PieceSpawnData> pieces = new List<PieceSpawnData>();
 
+    // =========================
+    // FLOOR VISUALS
+    // =========================
+
+    [System.Serializable]
+    public class FloorVisualData
+    {
+        public int yLevel;
+        public GameObject defaultBlockPrefab;
+    }
+
+    [Header("Floor Visuals")]
+    public List<FloorVisualData> floorVisuals =
+        new List<FloorVisualData>();
+
+    // =========================
+    // SETTINGS
+    // =========================
+
     [Header("Generation Settings")]
     public int maxAttempts = 50;
+
+    // =========================
+    // START
+    // =========================
 
     void Start()
     {
@@ -27,8 +56,9 @@ public class LevelGenerator : MonoBehaviour
     }
 
     // =========================
-    // MAIN GENERATION FLOW
+    // GENERATION FLOW
     // =========================
+
     void GenerateLevel()
     {
         int attempts = 0;
@@ -56,12 +86,52 @@ public class LevelGenerator : MonoBehaviour
     // =========================
     // SPAWN SYSTEM
     // =========================
+
     void SpawnAllPieces()
     {
+        SpawnFloorPieces();
+
         foreach (var data in pieces)
         {
             SpawnPiece(data);
         }
+    }
+
+    void SpawnFloorPieces()
+    {
+        Vector3Int min = RuleManager.Instance.MinBounds;
+        Vector3Int max = RuleManager.Instance.MaxBounds;
+
+        foreach (var floor in floorVisuals)
+        {
+            for (int x = min.x; x <= max.x; x++)
+            {
+                for (int z = min.z; z <= max.z; z++)
+                {
+                    Vector3Int pos = new Vector3Int(x, floor.yLevel, z);
+
+                    SpawnFloorPiece(pos, floor.defaultBlockPrefab);
+                }
+            }
+        }
+    }
+
+    void SpawnFloorPiece(Vector3Int position, GameObject prefab)
+    {
+        GameObject obj = Instantiate(piecePrefab);
+
+        Pieza pieza = obj.GetComponent<Pieza>();
+
+        if (pieza == null)
+        {
+            Debug.LogError("Prefab sin Pieza");
+            return;
+        }
+
+        RuleManager.Instance.PlacePiece(pieza, position);
+
+        pieza.SetBlockPrefab(prefab);
+        pieza.Initialize();
     }
 
     void SpawnPiece(PieceSpawnData data)
@@ -76,19 +146,47 @@ public class LevelGenerator : MonoBehaviour
             return;
         }
 
-        // 1. Colocar en grid
+        if (RuleManager.Instance.IsOccupied(data.position))
+        {
+            Pieza oldPiece = RuleManager.Instance.GetPieceAt(data.position);
+
+            if (oldPiece != null)
+            {
+                Destroy(oldPiece.gameObject);
+            }
+
+            RuleManager.Instance.RemovePiece(data.position);
+        }
+
         RuleManager.Instance.PlacePiece(pieza, data.position);
 
-        // 2. Visual
-        pieza.SetBlockPrefab(data.blockPrefab);
-
-        // 3. Dirección aleatoria (IMPORTANTE: antes de simular)
+        pieza.SetBlockPrefab(GetBlockPrefab(data));
         pieza.Initialize();
+    }
+
+    // =========================
+    // UTIL
+    // =========================
+
+    GameObject GetBlockPrefab(PieceSpawnData data)
+    {
+        if (data.customBlockPrefab != null)
+            return data.customBlockPrefab;
+
+        foreach (var floor in floorVisuals)
+        {
+            if (floor.yLevel == data.position.y)
+                return floor.defaultBlockPrefab;
+        }
+
+        Debug.LogWarning($"No hay prefab asignado para Y={data.position.y}");
+        return null;
     }
 
     // =========================
     // CLEANUP
     // =========================
+
     void ClearLevel()
     {
         Pieza[] existingPieces = FindObjectsOfType<Pieza>();
@@ -97,5 +195,7 @@ public class LevelGenerator : MonoBehaviour
         {
             Destroy(p.gameObject);
         }
+
+        RuleManager.Instance.ClearGrid();
     }
 }

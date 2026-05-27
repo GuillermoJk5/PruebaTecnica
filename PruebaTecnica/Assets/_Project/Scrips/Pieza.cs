@@ -57,6 +57,60 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
+    // MOVE INPUT
+    // =========================
+
+    private bool isMoving = false;
+    private Vector3 moveDir;
+    private float moveSpeed = 3f;
+
+    private void OnMouseDown()
+    {
+        moveDir = GetMoveDirection();
+        isMoving = true;
+    }
+
+    Vector3 GetMoveDirection()
+    {
+        return signalsRoot.right.normalized;
+    }
+
+    // =========================
+    // UPDATE MOVEMENT
+    // =========================
+
+    private void Update()
+    {
+        if (!isMoving) return;
+
+        var result = RuleManager.Instance.CheckMove(
+            transform.position,
+            moveDir,
+            0.5f //checkDistance
+        );
+
+        switch (result)
+        {
+            case RuleManager.MoveResult.CanMove:
+                transform.position += moveDir * moveSpeed * Time.deltaTime;
+                break;
+
+            case RuleManager.MoveResult.BlockedByPiece:
+                isMoving = false;
+                break;
+
+            case RuleManager.MoveResult.OutOfBounds:
+                Die();
+                break;
+        }
+    }
+
+    void Die()
+    {
+        gameObject.SetActive(false);
+    }
+
+    // =========================
     // DIRECTION
     // =========================
 
@@ -109,59 +163,5 @@ public class Pieza : MonoBehaviour
             visualRoot.rotation,
             visualRoot
         );
-    }
-
-    // =========================
-    // MOVE INPUT
-    // =========================
-
-    private bool isMoving = false;
-    private Vector3 moveDir;
-    private float moveSpeed = 3f;
-
-    private void OnMouseDown()
-    {
-        moveDir = GetMoveDirection();
-        isMoving = true;
-    }
-
-    Vector3 GetMoveDirection()
-    {
-        return signalsRoot.right.normalized;
-    }
-
-    // =========================
-    // UPDATE MOVEMENT
-    // =========================
-
-    private void Update()
-    {
-        if (!isMoving) return;
-
-        var result = RuleManager.Instance.CheckMove(
-            transform.position,
-            moveDir,
-            2f //checkDistance
-        );
-
-        switch (result)
-        {
-            case RuleManager.MoveResult.CanMove:
-                transform.position += moveDir * moveSpeed * Time.deltaTime;
-                break;
-
-            case RuleManager.MoveResult.BlockedByPiece:
-                isMoving = false;
-                break;
-
-            case RuleManager.MoveResult.OutOfBounds:
-                Die();
-                break;
-        }
-    }
-
-    void Die()
-    {
-        gameObject.SetActive(false);
     }
 }

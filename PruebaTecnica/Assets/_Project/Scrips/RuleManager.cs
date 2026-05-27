@@ -5,14 +5,18 @@ public class RuleManager : MonoBehaviour
 {
     public static RuleManager Instance;
 
+    // =========================
+    // GRID DATA
+    // =========================
+
     [Header("Grid Bounds")]
     [SerializeField] private Vector3Int minBounds = Vector3Int.zero;
     [SerializeField] private Vector3Int maxBounds = new Vector3Int(5, 5, 5);
 
-    [Header("Grid Settings")]
-    [SerializeField] private float cellSize = 1f;
-
     private Dictionary<Vector3Int, Pieza> grid = new Dictionary<Vector3Int, Pieza>();
+
+    public Vector3Int MinBounds => minBounds;
+    public Vector3Int MaxBounds => maxBounds;
 
     void Awake()
     {
@@ -38,15 +42,6 @@ public class RuleManager : MonoBehaviour
         return grid.ContainsKey(pos);
     }
 
-    public Vector3 GridToWorld(Vector3Int pos)
-    {
-        return new Vector3(
-            pos.x * cellSize,
-            pos.y * cellSize,
-            pos.z * cellSize
-        );
-    }
-
     // =========================
     // PIECE PLACEMENT
     // =========================
@@ -59,9 +54,32 @@ public class RuleManager : MonoBehaviour
         grid[pos] = pieza;
 
         pieza.SetGridPosition(pos);
-        pieza.transform.position = GridToWorld(pos);
+        pieza.transform.position = pos;
 
         return true;
+    }
+
+    public Pieza GetPieceAt(Vector3Int pos)
+    {
+        if (grid.TryGetValue(pos, out Pieza pieza))
+        {
+            return pieza;
+        }
+
+        return null;
+    }
+
+    public void RemovePiece(Vector3Int pos)
+    {
+        if (grid.ContainsKey(pos))
+        {
+            grid.Remove(pos);
+        }
+    }
+
+    public void ClearGrid()
+    {
+        grid.Clear();
     }
 
     // =========================
@@ -145,14 +163,12 @@ public class RuleManager : MonoBehaviour
 
             Vector3Int next = p.pos + p.dir;
 
-            // fuera del mundo ? desaparece
             if (!IsInsideWorld(next))
             {
                 p.active = false;
                 continue;
             }
 
-            // colisión ? no avanza
             if (occupied.ContainsKey(next))
                 continue;
 
