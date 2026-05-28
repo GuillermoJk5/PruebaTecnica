@@ -43,8 +43,7 @@ public class LevelGenerator : MonoBehaviour
     // SETTINGS
     // =========================
 
-    [Header("Generation Settings")]
-    public int maxAttempts = 50;
+ 
 
     // =========================
     // START
@@ -60,27 +59,10 @@ public class LevelGenerator : MonoBehaviour
     // =========================
 
     void GenerateLevel()
-    {
-        int attempts = 0;
-        bool validLevel = false;
-
-        while (!validLevel && attempts < maxAttempts)
-        {
-            attempts++;
-
+    {   
             ClearLevel();
             SpawnAllPieces();
 
-            validLevel = RuleManager.Instance.HasValidSimulation();
-        }
-
-        if (!validLevel)
-        {
-            Debug.LogError("No se pudo generar un nivel válido tras varios intentos.");
-            return;
-        }
-
-        Debug.Log($"Nivel generado correctamente en {attempts} intentos.");
     }
 
     // =========================
