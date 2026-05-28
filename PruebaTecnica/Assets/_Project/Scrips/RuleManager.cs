@@ -42,6 +42,8 @@ public class RuleManager : MonoBehaviour
         return grid.ContainsKey(pos);
     }
 
+    public Dictionary<Vector3Int, Pieza> GetGrid() { return grid; }
+
     // =========================
     // PIECE PLACEMENT
     // =========================

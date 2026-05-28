@@ -2,34 +2,18 @@ using UnityEngine;
 
 public class Pieza : MonoBehaviour
 {
-    // =========================
-    // GRID DATA
-    // =========================
-
     private Vector3Int gridPosition;
     private MoveDirection direction;
 
     public Vector3Int GridPosition => gridPosition;
     public MoveDirection Direction => direction;
 
-    // =========================
-    // REFERENCES
-    // =========================
-
     [Header("References")]
     [SerializeField] private Transform visualRoot;
     [SerializeField] private Transform signalsRoot;
 
-    // =========================
-    // VISUAL
-    // =========================
-
     private GameObject blockPrefab;
     private GameObject terrainInstance;
-
-    // =========================
-    // ENUM
-    // =========================
 
     public enum MoveDirection
     {
@@ -42,12 +26,12 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // INIT
+    // INIT (AHORA SIMPLE)
     // =========================
 
-    public void Initialize()
+    public void Initialize(MoveDirection dir)
     {
-        GenerateRandomDirection();
+        direction = dir;
         ApplyDirectionToSignals();
     }
 
@@ -57,7 +41,7 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // MOVE INPUT
+    // MOVEMENT (igual que antes)
     // =========================
 
     private bool isMoving = false;
@@ -75,33 +59,53 @@ public class Pieza : MonoBehaviour
         return signalsRoot.right.normalized;
     }
 
-    // =========================
-    // UPDATE MOVEMENT
-    // =========================
+    // private void Update()
+    // {
+    //     if (!isMoving) return;
+    //
+    //     Debug.DrawRay(transform.position, moveDir * 2f, Color.red);
+    //
+    //     var level = FindFirstObjectByType<LevelGenerator>();
+    //
+    //     if (!level.CanMove(transform.position, moveDir, 1f))
+    //     {
+    //         isMoving = false;
+    //         Debug.Log("Choque");
+    //         return;
+    //     }
+    //
+    //     transform.position += moveDir * moveSpeed * Time.deltaTime;
+    //
+    //     if (!level.IsInsidePlayableArea(transform.position))
+    //     {
+    //         Die();
+    //     }
+    // }
+    private LevelGenerator level;
+
+    void Start()
+    {
+        level = FindFirstObjectByType<LevelGenerator>();
+    }
 
     private void Update()
     {
         if (!isMoving) return;
 
-        var result = RuleManager.Instance.CheckMove(
-            transform.position,
-            moveDir,
-            0.5f //checkDistance
-        );
+        Debug.DrawRay(transform.position, moveDir * 2f, Color.red);
 
-        switch (result)
+        if (!level.CanMove(transform.position, moveDir, 0.5f))
         {
-            case RuleManager.MoveResult.CanMove:
-                transform.position += moveDir * moveSpeed * Time.deltaTime;
-                break;
+            isMoving = false;
+            Debug.Log("Choque");
+            return;
+        }
 
-            case RuleManager.MoveResult.BlockedByPiece:
-                isMoving = false;
-                break;
+        transform.position += moveDir * moveSpeed * Time.deltaTime;
 
-            case RuleManager.MoveResult.OutOfBounds:
-                Die();
-                break;
+        if (!level.IsInsidePlayableArea(transform.position))
+        {
+            Die();
         }
     }
 
@@ -111,19 +115,15 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // DIRECTION
+    // VISUAL
     // =========================
-
-    void GenerateRandomDirection()
-    {
-        direction = (MoveDirection)Random.Range(0, 6);
-    }
 
     void ApplyDirectionToSignals()
     {
         if (signalsRoot == null) return;
 
-        signalsRoot.localRotation = Quaternion.Euler(GetRotation(direction));
+        signalsRoot.localRotation =
+            Quaternion.Euler(GetRotation(direction));
     }
 
     Vector3Int GetRotation(MoveDirection dir)
@@ -136,13 +136,9 @@ public class Pieza : MonoBehaviour
             case MoveDirection.Left: return new Vector3Int(0, 270, 0);
             case MoveDirection.Up: return new Vector3Int(0, 0, 90);
             case MoveDirection.Down: return new Vector3Int(0, 0, 270);
-            default: return Vector3Int.zero;
         }
+        return Vector3Int.zero;
     }
-
-    // =========================
-    // VISUAL
-    // =========================
 
     public void SetBlockPrefab(GameObject newPrefab)
     {
