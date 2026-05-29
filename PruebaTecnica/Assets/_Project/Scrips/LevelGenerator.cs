@@ -1,26 +1,32 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class LevelGenerator : MonoBehaviour
 {
-    // =========================
+    // ==========================================
+    // SINGLETON
+    // ==========================================
+    public static LevelGenerator Instance;
+
+    // ==========================================
     // PREFAB
-    // =========================
-
-   
-   
-
-    [Header("Prefab")]
+    // ==========================================
+    [Header("Piece Prefab")]
     public GameObject piecePrefab;
 
-    // =========================
-    // GRID SIZE
-    // =========================
-
+    // ==========================================
+    // GRID BOUNDS
+    // ==========================================
     [Header("Grid Bounds")]
     public Vector3Int minBounds = Vector3Int.zero;
     public Vector3Int maxBounds = new Vector3Int(5, 5, 5);
 
+    [Header("Playable Area")]
+    public int playableBuffer = 2;
+
+    // ==========================================
+    // FLOOR VISUALS (¡Recuperado!)
+    // ==========================================
     [System.Serializable]
     public class FloorVisualData
     {
@@ -31,6 +37,9 @@ public class LevelGenerator : MonoBehaviour
     [Header("Floor Visuals")]
     public List<FloorVisualData> floorVisuals = new();
 
+    // ==========================================
+    // OVERRIDES (¡Recuperado!)
+    // ==========================================
     [System.Serializable]
     public class PieceVisualOverride
     {
@@ -41,16 +50,19 @@ public class LevelGenerator : MonoBehaviour
     [Header("Overrides")]
     public List<PieceVisualOverride> overrides = new();
 
+    // ==========================================
+    // GRID INTERNOS
+    // ==========================================
     private Dictionary<Vector3Int, Pieza> grid = new();
-
-    // =========================
-    // CONSTRAINT SYSTEM
-    // =========================
-
     private ConstraintSystem constraints;
+
+    // ==========================================
+    // INIT
+    // ==========================================
 
     void Awake()
     {
+        Instance = this;
         constraints = new ConstraintSystem();
     }
 
@@ -59,19 +71,18 @@ public class LevelGenerator : MonoBehaviour
         GenerateLevel();
     }
 
-    // =========================
-    // GENERATION
-    // =========================
-
     public void GenerateLevel()
     {
         ClearLevel();
 
-        for (int y = 0; y <= maxBounds.y; y++)
+        // IMPORTANTE: Reseteamos los mapas de restricciones cada vez que se genera el nivel
+        constraints.ResetConstraints();
+
+        for (int y = minBounds.y; y <= maxBounds.y; y++)
         {
-            for (int z = 0; z <= maxBounds.z; z++)
+            for (int z = minBounds.z; z <= maxBounds.z; z++)
             {
-                for (int x = 0; x <= maxBounds.x; x++)
+                for (int x = minBounds.x; x <= maxBounds.x; x++)
                 {
                     Spawn(new Vector3Int(x, y, z));
                 }
@@ -86,71 +97,127 @@ public class LevelGenerator : MonoBehaviour
 
         PlacePiece(pieza, pos);
 
-        var dir = constraints.GetDirection(pos);
+        // Obtenemos dirección usando el enum unificado de Pieza
+        Pieza.MoveDirection dir = constraints.GetDirection(pos);
         constraints.Apply(pos, dir);
 
         pieza.SetGridPosition(pos);
         pieza.SetBlockPrefab(ResolvePrefab(pos));
-        pieza.Initialize((Pieza.MoveDirection)dir);
+        pieza.Initialize(dir); // Ya no requiere casteo peligroso
     }
 
     // =========================
-    // GRID CORE (ANTES RULEMANAGER)
+    // VISUALS
     // =========================
 
-    public bool IsInsidePlayableArea(Vector3 worldPos)
+    GameObject ResolvePrefab(Vector3Int pos)
     {
-        Vector3Int p = Vector3Int.RoundToInt(worldPos);
+        // PRIORIDAD: override
+        foreach (var o in overrides)
+        {
+            if (o.position == pos && o.customBlockPrefab != null)
+                return o.customBlockPrefab;
+        }
 
-        Vector3Int min = Vector3Int.one * -2;
-        Vector3Int max = Vector3Int.one * 6;
+        // FLOOR
+        foreach (var f in floorVisuals)
+        {
+            if (f.yLevel == pos.y)
+                return f.defaultBlockPrefab;
+        }
+
+        return null;
+    }
+
+    // =========================
+    // GRID CORE
+    // =========================
+    public bool IsInsideGrid(Vector3Int pos)
+    {
+        return pos.x >= minBounds.x &&
+               pos.x <= maxBounds.x &&
+               pos.y >= minBounds.y &&
+               pos.y <= maxBounds.y &&
+               pos.z >= minBounds.z &&
+               pos.z <= maxBounds.z;
+    }
+    public Vector3Int WorldToCell(Vector3 worldPos)
+    {
+        return Vector3Int.RoundToInt(worldPos);
+    }
+
+    public void MovePiece(Pieza pieza, Vector3Int oldPos, Vector3Int newPos)
+    {
+        // 1. limpiar posición anterior SOLO si coincide
+        if (grid.ContainsKey(oldPos) && grid[oldPos] == pieza)
+        {
+            grid.Remove(oldPos);
+        }
+
+        // 2. si la nueva posición está ocupada, se para
+        if (grid.ContainsKey(newPos))
+        {
+            return;
+        }
+
+        // 3. asignar nueva posición en grid
+        grid[newPos] = pieza;
+
+        // 4. actualizar estado lógico de la pieza
+        pieza.SetGridPosition(newPos);
+
+        // 5. mover visualmente (si quieres sincronización inmediata)
+        pieza.transform.position = newPos;
+    }
+
+    public bool CanMoveThrough(Vector3Int cell)
+    {
+        // Si hay pieza → bloquea
+        return !grid.ContainsKey(cell);
+    }
+
+    public void PlacePiece(Pieza pieza, Vector3Int pos)
+    {
+        if (grid.ContainsKey(pos))
+        {
+            Debug.Log("Se borra "+pos);
+            Destroy(grid[pos].gameObject);
+            grid.Remove(pos);
+        }
+
+        grid[pos] = pieza;
+        
+        pieza.transform.position = pos;
+
+       
+    }
+
+    // =========================
+    // PLAYABLE AREA
+    // =========================
+
+    public bool IsInsidePlayableArea(Vector3 pos)
+    {
+        Vector3Int p = Vector3Int.RoundToInt(pos);
+
+        Vector3Int min = minBounds - Vector3Int.one * playableBuffer;
+        Vector3Int max = maxBounds + Vector3Int.one * playableBuffer;
 
         return p.x >= min.x && p.x <= max.x &&
                p.y >= min.y && p.y <= max.y &&
                p.z >= min.z && p.z <= max.z;
     }
 
-    public bool IsValidCell(Vector3Int pos)
-    {
-        return pos.x >= minBounds.x && pos.x <= maxBounds.x &&
-               pos.y >= minBounds.y && pos.y <= maxBounds.y &&
-               pos.z >= minBounds.z && pos.z <= maxBounds.z;
-    }
+    // =========================
+    // MOVEMENT CHECK
+    // =========================
 
-    public bool IsOccupied(Vector3Int pos)
-    {
-        return grid.ContainsKey(pos);
-    }
 
-    public void PlacePiece(Pieza pieza, Vector3Int pos)
-    {
-        if (!IsValidCell(pos)) return;
+    // =========================
+    // CLEANUP
+    // =========================
 
-        if (IsOccupied(pos))
-        {
-            Destroy(grid[pos].gameObject);
-            grid.Remove(pos);
-        }
-
-        grid[pos] = pieza;
-        pieza.transform.position = pos;
-    }
-
-    public Pieza GetPieceAt(Vector3Int pos)
-    {
-        grid.TryGetValue(pos, out Pieza p);
-        return p;
-    }
-
-    public void RemovePiece(Vector3Int pos)
-    {
-        if (grid.ContainsKey(pos))
-        {
-            grid.Remove(pos);
-        }
-    }
-
-    public void ClearLevel()
+    void ClearLevel()
     {
         foreach (var p in FindObjectsOfType<Pieza>())
         {
@@ -158,32 +225,7 @@ public class LevelGenerator : MonoBehaviour
         }
 
         grid.Clear();
-        constraints.Clear();
-    }
 
-    // =========================
-    // MOVEMENT CHECK (REEMPLAZA RULEMANAGER CHECKMOVE)
-    // =========================
-
-    public bool CanMove(Vector3 worldPos, Vector3 dir, float distance)
-    {
-        if (!IsInside(worldPos)) {  Debug.Log("FueraLimites");
-            return false; }
-          
-
-        if (Physics.Raycast(worldPos, dir, distance))
-            return false;
-
-        return true;
-    }
-
-    bool IsInside(Vector3 pos)
-    {
-        Vector3Int p = Vector3Int.RoundToInt(pos);
-
-        return p.x >= minBounds.x && p.x <= maxBounds.x &&
-               p.y >= minBounds.y && p.y <= maxBounds.y &&
-               p.z >= minBounds.z && p.z <= maxBounds.z;
     }
 
     // =========================
@@ -192,103 +234,118 @@ public class LevelGenerator : MonoBehaviour
 
     private class ConstraintSystem
     {
-        private Dictionary<Vector2Int, State> rowYZ = new();
-        private Dictionary<Vector2Int, State> colXZ = new();
-        private Dictionary<Vector2Int, State> depthXY = new();
+        // Guardamos la dirección asignada a cada línea. 
+        // Si una línea ya tiene dirección, las demás piezas de esa línea deben coincidir en el eje de movimiento.
+        private Dictionary<Vector2Int, Pieza.MoveDirection> lineXDirection = new(); // Clave: (Y, Z) -> Controla Front/Back
+        private Dictionary<Vector2Int, Pieza.MoveDirection> lineYDirection = new(); // Clave: (X, Z) -> Controla Up/Down
+        private Dictionary<Vector2Int, Pieza.MoveDirection> lineZDirection = new(); // Clave: (X, Y) -> Controla Right/Left
 
-        public enum State
+        public void ResetConstraints()
         {
-            None,
-            OnlyRight, OnlyLeft,
-            OnlyUp, OnlyDown,
-            OnlyFront, OnlyBack
+            lineXDirection.Clear();
+            lineYDirection.Clear();
+            lineZDirection.Clear();
         }
 
-        public enum MoveDirection
+        public Pieza.MoveDirection GetDirection(Vector3Int pos)
         {
-            Up, Down, Right, Left, Front, Back
-        }
-
-        public MoveDirection GetDirection(Vector3Int pos)
-        {
-            List<MoveDirection> options = new()
+            List<Pieza.MoveDirection> options = new()
             {
-                MoveDirection.Up,
-                MoveDirection.Down,
-                MoveDirection.Right,
-                MoveDirection.Left,
-                MoveDirection.Front,
-                MoveDirection.Back
+                Pieza.MoveDirection.Up, Pieza.MoveDirection.Down,
+                Pieza.MoveDirection.Right, Pieza.MoveDirection.Left,
+                Pieza.MoveDirection.Front, Pieza.MoveDirection.Back
             };
 
-            Vector2Int row = new(pos.y, pos.z);
-            if (rowYZ.TryGetValue(row, out var r))
+            Vector2Int fixedYZ = new(pos.y, pos.z);
+            Vector2Int fixedXZ = new(pos.x, pos.z);
+            Vector2Int fixedXY = new(pos.x, pos.y);
+
+            // REGLA DE ORO: Si la fila/columna ya tiene una dirección de escape asignada por otra pieza,
+            // eliminamos las direcciones que causarían un choque frontal o un bloqueo cruzado en esa línea.
+
+            // Si la línea X ya se mueve en un sentido, las piezas de esa línea NO pueden ir en sentido opuesto
+            if (lineXDirection.TryGetValue(fixedYZ, out var existingXDir))
             {
-                if (r == State.OnlyRight) options.Remove(MoveDirection.Left);
-                if (r == State.OnlyLeft) options.Remove(MoveDirection.Right);
+                options.Remove(existingXDir == Pieza.MoveDirection.Front ? Pieza.MoveDirection.Back : Pieza.MoveDirection.Front);
             }
 
-            Vector2Int col = new(pos.x, pos.z);
-            if (colXZ.TryGetValue(col, out var c))
+            if (lineYDirection.TryGetValue(fixedXZ, out var existingYDir))
             {
-                if (c == State.OnlyUp) options.Remove(MoveDirection.Down);
-                if (c == State.OnlyDown) options.Remove(MoveDirection.Up);
+                options.Remove(existingYDir == Pieza.MoveDirection.Up ? Pieza.MoveDirection.Down : Pieza.MoveDirection.Up);
             }
 
-            Vector2Int depth = new(pos.x, pos.y);
-            if (depthXY.TryGetValue(depth, out var d))
+            if (lineZDirection.TryGetValue(fixedXY, out var existingZDir))
             {
-                if (d == State.OnlyFront) options.Remove(MoveDirection.Back);
-                if (d == State.OnlyBack) options.Remove(MoveDirection.Front);
+                options.Remove(existingZDir == Pieza.MoveDirection.Right ? Pieza.MoveDirection.Left : Pieza.MoveDirection.Right);
             }
 
+            // Filtrado inmediato por piezas vecinas ya existentes
+            options.RemoveAll(dir => WouldCauseImmediateConflict(pos, dir));
+
+            // Fallback seguro si se queda sin opciones (apuntar hacia el exterior más cercano)
             if (options.Count == 0)
-                return MoveDirection.Up;
+            {
+                return GetSafestFallback(pos);
+            }
 
             return options[Random.Range(0, options.Count)];
         }
 
-        public void Apply(Vector3Int pos, MoveDirection dir)
+        public void Apply(Vector3Int pos, Pieza.MoveDirection dir)
         {
-            Vector2Int row = new(pos.y, pos.z);
-            Vector2Int col = new(pos.x, pos.z);
-            Vector2Int depth = new(pos.x, pos.y);
+            Vector2Int fixedYZ = new(pos.y, pos.z);
+            Vector2Int fixedXZ = new(pos.x, pos.z);
+            Vector2Int fixedXY = new(pos.x, pos.y);
 
-            switch (dir)
+            // Registramos la dirección de la línea si es la primera pieza en definirla
+            if (dir == Pieza.MoveDirection.Front || dir == Pieza.MoveDirection.Back)
             {
-                case MoveDirection.Right: rowYZ[row] = State.OnlyRight; break;
-                case MoveDirection.Left: rowYZ[row] = State.OnlyLeft; break;
-                case MoveDirection.Up: colXZ[col] = State.OnlyUp; break;
-                case MoveDirection.Down: colXZ[col] = State.OnlyDown; break;
-                case MoveDirection.Front: depthXY[depth] = State.OnlyFront; break;
-                case MoveDirection.Back: depthXY[depth] = State.OnlyBack; break;
+                if (!lineXDirection.ContainsKey(fixedYZ)) lineXDirection[fixedYZ] = dir;
+            }
+            else if (dir == Pieza.MoveDirection.Up || dir == Pieza.MoveDirection.Down)
+            {
+                if (!lineYDirection.ContainsKey(fixedXZ)) lineYDirection[fixedXZ] = dir;
+            }
+            else if (dir == Pieza.MoveDirection.Right || dir == Pieza.MoveDirection.Left)
+            {
+                if (!lineZDirection.ContainsKey(fixedXY)) lineZDirection[fixedXY] = dir;
             }
         }
 
-        public void Clear()
+        private bool WouldCauseImmediateConflict(Vector3Int pos, Pieza.MoveDirection dir)
         {
-            rowYZ.Clear();
-            colXZ.Clear();
-            depthXY.Clear();
-        }
-    }
-
-    GameObject ResolvePrefab(Vector3Int pos)
-    {
-        // PRIORIDAD 1: override individual
-        foreach (var o in overrides)
-        {
-            if (o.position == pos && o.customBlockPrefab != null)
-                return o.customBlockPrefab;
+            Vector3Int target = pos + DirectionToVector(dir);
+            if (!LevelGenerator.Instance.IsInsideGrid(target)) return false;
+            if (!LevelGenerator.Instance.CanMoveThrough(target)) return true;
+            return false;
         }
 
-        // PRIORIDAD 2: floor default
-        foreach (var f in floorVisuals)
+        private Pieza.MoveDirection GetSafestFallback(Vector3Int pos)
         {
-            if (f.yLevel == pos.y)
-                return f.defaultBlockPrefab;
+            int distToMinX = pos.x - LevelGenerator.Instance.minBounds.x;
+            int distToMaxX = LevelGenerator.Instance.maxBounds.x - pos.x;
+            int distToMinZ = pos.z - LevelGenerator.Instance.minBounds.z;
+            int distToMaxZ = LevelGenerator.Instance.maxBounds.z - pos.z;
+
+            if (distToMinX <= distToMaxX && distToMinX <= distToMinZ && distToMinX <= distToMaxZ) return Pieza.MoveDirection.Back;
+            if (distToMaxX <= distToMinZ && distToMaxX <= distToMaxZ) return Pieza.MoveDirection.Front;
+            if (distToMinZ <= distToMaxZ) return Pieza.MoveDirection.Right; // Según el GetRotation de tu pieza, Right es -Z
+            return Pieza.MoveDirection.Left;
         }
 
-        return null;
+        private Vector3Int DirectionToVector(Pieza.MoveDirection dir)
+        {
+            // Mapeado geométrico exacto de los vectores según el método GetRotation() de tu script Pieza.cs
+            return dir switch
+            {
+                Pieza.MoveDirection.Front => new Vector3Int(1, 0, 0),   // +X (Rotación 0,0,0)
+                Pieza.MoveDirection.Back => new Vector3Int(-1, 0, 0),  // -X (Rotación 0,180,0)
+                Pieza.MoveDirection.Left => new Vector3Int(0, 0, 1),   // +Z (Rotación 0,270,0)
+                Pieza.MoveDirection.Right => new Vector3Int(0, 0, -1),  // -Z (Rotación 0,90,0)
+                Pieza.MoveDirection.Up => new Vector3Int(0, 1, 0),   // +Y (Rotación 0,0,90)
+                Pieza.MoveDirection.Down => new Vector3Int(0, -1, 0),  // -Y (Rotación 0,0,270)
+                _ => Vector3Int.zero
+            };
+        }
     }
 }

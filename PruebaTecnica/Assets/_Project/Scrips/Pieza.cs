@@ -1,19 +1,20 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class Pieza : MonoBehaviour
 {
+    // =========================
+    // GRID
+    // =========================
+
     private Vector3Int gridPosition;
-    private MoveDirection direction;
 
     public Vector3Int GridPosition => gridPosition;
-    public MoveDirection Direction => direction;
 
-    [Header("References")]
-    [SerializeField] private Transform visualRoot;
-    [SerializeField] private Transform signalsRoot;
+    // =========================
+    // DIRECTION
+    // =========================
 
-    private GameObject blockPrefab;
-    private GameObject terrainInstance;
+    private MoveDirection direction;
 
     public enum MoveDirection
     {
@@ -26,12 +27,42 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // INIT (AHORA SIMPLE)
+    // REFERENCES
+    // =========================
+
+    [Header("References")]
+    [SerializeField] private Transform visualRoot;
+
+    [SerializeField] private Transform signalsRoot;
+
+    // =========================
+    // VISUAL
+    // =========================
+
+    private GameObject blockPrefab;
+
+    private GameObject visualInstance;
+
+    // =========================
+    // MOVEMENT
+    // =========================
+
+    [SerializeField] private float moveSpeed = 5f;
+
+    private bool isMoving = false;
+
+    private Vector3 targetPosition;
+
+    private Vector3 moveDir;
+
+    // =========================
+    // INIT
     // =========================
 
     public void Initialize(MoveDirection dir)
     {
         direction = dir;
+
         ApplyDirectionToSignals();
     }
 
@@ -41,73 +72,104 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // MOVEMENT (igual que antes)
+    // INPUT
     // =========================
 
-    private bool isMoving = false;
-    private Vector3 moveDir;
-    private float moveSpeed = 3f;
-
-    private void OnMouseDown()
+    void OnMouseDown()
     {
-        moveDir = GetMoveDirection();
+        if (isMoving)
+            return;
+
+        moveDir = GetDirectionVector();
+
+        targetPosition = CalculateTargetPosition();
+
         isMoving = true;
     }
 
-    Vector3 GetMoveDirection()
+    // =========================
+    // UPDATE
+    // =========================
+
+   
+    void Update()
+    {
+        if (!isMoving) { 
+         return;
+        }
+           
+       
+
+        transform.position = Vector3.MoveTowards(
+            transform.position,
+            targetPosition,
+            moveSpeed * Time.deltaTime
+        );
+
+        if (Vector3.Distance(transform.position, targetPosition) < 0.01f)
+        {
+            transform.position = targetPosition;
+
+            isMoving = false;
+            LevelGenerator.Instance.MovePiece(
+                 this,
+                 gridPosition,
+                 LevelGenerator.Instance.WorldToCell(targetPosition)
+            );
+
+
+            if (!LevelGenerator.Instance.IsInsidePlayableArea(transform.position))
+            {
+                Die();
+            }
+        }
+    }
+
+    // =========================
+    // TARGET CALCULATION
+    // =========================
+
+    Vector3 CalculateTargetPosition()
+    {
+        Vector3 current = transform.position;
+
+        while (true)
+        {
+            Vector3 next = current + moveDir;
+
+            Vector3Int cell = LevelGenerator.Instance.WorldToCell(next);
+
+            // ❌ SOLO bloquea si hay pieza (dentro del grid)
+            if (LevelGenerator.Instance.IsInsideGrid(cell))
+            {
+                if (!LevelGenerator.Instance.CanMoveThrough(cell))
+                {
+                    return current;
+                }
+            }
+
+            // ❌ SI SALE DEL PLAYABLE AREA → cortar
+            if (!LevelGenerator.Instance.IsInsidePlayableArea(next))
+            {
+                return current;
+            }
+
+            current = next;
+        }
+    }
+
+    // =========================
+    // DIRECTION
+    // =========================
+
+    Vector3 GetDirectionVector()
     {
         return signalsRoot.right.normalized;
     }
 
-    // private void Update()
-    // {
-    //     if (!isMoving) return;
-    //
-    //     Debug.DrawRay(transform.position, moveDir * 2f, Color.red);
-    //
-    //     var level = FindFirstObjectByType<LevelGenerator>();
-    //
-    //     if (!level.CanMove(transform.position, moveDir, 1f))
-    //     {
-    //         isMoving = false;
-    //         Debug.Log("Choque");
-    //         return;
-    //     }
-    //
-    //     transform.position += moveDir * moveSpeed * Time.deltaTime;
-    //
-    //     if (!level.IsInsidePlayableArea(transform.position))
-    //     {
-    //         Die();
-    //     }
-    // }
-    private LevelGenerator level;
-
-    void Start()
-    {
-        level = FindFirstObjectByType<LevelGenerator>();
-    }
-
-    private void Update()
-    {
-        if (!isMoving) return;
-
-        Debug.DrawRay(transform.position, moveDir * 2f, Color.red);
-
-        if (!level.CanMove(transform.position, moveDir, 0.5f))
-        {
-            isMoving = false;
-            Debug.Log("Choque");
-            return;
-        }
-
-        transform.position += moveDir * moveSpeed * Time.deltaTime;
-
-        if (!level.IsInsidePlayableArea(transform.position))
-        {
-            Die();
-        }
-    }
+    // =========================
+    // DIE
+    // =========================
 
     void Die()
     {
@@ -115,12 +177,13 @@ public class Pieza : MonoBehaviour
     }
 
     // =========================
-    // VISUAL
+    // VISUAL ROTATION
     // =========================
 
     void ApplyDirectionToSignals()
     {
-        if (signalsRoot == null) return;
+        if (signalsRoot == null)
+            return;
 
         signalsRoot.localRotation =
             Quaternion.Euler(GetRotation(direction));
@@ -130,30 +193,50 @@ public class Pieza : MonoBehaviour
     {
         switch (dir)
         {
-            case MoveDirection.Front: return new Vector3Int(0, 0, 0);
-            case MoveDirection.Right: return new Vector3Int(0, 90, 0);
-            case MoveDirection.Back: return new Vector3Int(0, 180, 0);
-            case MoveDirection.Left: return new Vector3Int(0, 270, 0);
-            case MoveDirection.Up: return new Vector3Int(0, 0, 90);
-            case MoveDirection.Down: return new Vector3Int(0, 0, 270);
+            case MoveDirection.Front:
+                return new Vector3Int(0, 0, 0);
+
+            case MoveDirection.Right:
+                return new Vector3Int(0, 90, 0);
+
+            case MoveDirection.Back:
+                return new Vector3Int(0, 180, 0);
+
+            case MoveDirection.Left:
+                return new Vector3Int(0, 270, 0);
+
+            case MoveDirection.Up:
+                return new Vector3Int(0, 0, 90);
+
+            case MoveDirection.Down:
+                return new Vector3Int(0, 0, 270);
         }
+
         return Vector3Int.zero;
     }
 
-    public void SetBlockPrefab(GameObject newPrefab)
+    // =========================
+    // VISUAL PREFAB
+    // =========================
+
+    public void SetBlockPrefab(GameObject prefab)
     {
-        blockPrefab = newPrefab;
+        blockPrefab = prefab;
+
         SpawnVisual();
     }
 
     void SpawnVisual()
     {
-        if (visualRoot == null || blockPrefab == null) return;
+        if (visualRoot == null || blockPrefab == null)
+            return;
 
-        if (terrainInstance != null)
-            Destroy(terrainInstance);
+        if (visualInstance != null)
+        {
+            Destroy(visualInstance);
+        }
 
-        terrainInstance = Instantiate(
+        visualInstance = Instantiate(
             blockPrefab,
             visualRoot.position,
             visualRoot.rotation,
