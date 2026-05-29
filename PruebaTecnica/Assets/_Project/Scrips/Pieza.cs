@@ -228,6 +228,7 @@ public class Pieza : MonoBehaviour
     // ==========================================
     void Die()
     {
+        LevelGenerator.Instance.OnPieceDestroyed();
         gameObject.SetActive(false);
     }
 }

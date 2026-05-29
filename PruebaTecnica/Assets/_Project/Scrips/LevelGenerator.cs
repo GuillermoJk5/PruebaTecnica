@@ -29,6 +29,8 @@ public class LevelGenerator : MonoBehaviour
     [Header("Overrides")]
     public List<PieceVisualOverride> overrides = new();
 
+    private int activePiecesCount = 0;
+
     // ==========================================
     // DATA STRUCTURES & SERIALIZABLES
     // ==========================================
@@ -108,7 +110,8 @@ public class LevelGenerator : MonoBehaviour
 
         pieza.SetGridPosition(pos);
         pieza.SetBlockPrefab(ResolvePrefab(pos));
-        pieza.Initialize(dir); // Ya no requiere casteo peligroso
+        pieza.Initialize(dir);
+        activePiecesCount++;
     }
 
     // ==========================================
