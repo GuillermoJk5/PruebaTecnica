@@ -4,19 +4,18 @@ using UnityEngine;
 public class LevelGenerator : MonoBehaviour
 {
     // ==========================================
-    // SINGLETON
+    // CORES & SINGLETONS
     // ==========================================
     public static LevelGenerator Instance;
+    private ConstraintSystem constraints;
+    private Dictionary<Vector3Int, Pieza> grid = new();
 
     // ==========================================
-    // PREFAB
+    // INSPECTOR PROPERTIES
     // ==========================================
     [Header("Piece Prefab")]
     public GameObject piecePrefab;
 
-    // ==========================================
-    // GRID BOUNDS
-    // ==========================================
     [Header("Grid Bounds")]
     public Vector3Int minBounds = Vector3Int.zero;
     public Vector3Int maxBounds = new Vector3Int(5, 5, 5);
@@ -24,8 +23,14 @@ public class LevelGenerator : MonoBehaviour
     [Header("Playable Area")]
     public int playableBuffer = 2;
 
+    [Header("Floor Visuals")]
+    public List<FloorVisualData> floorVisuals = new();
+
+    [Header("Overrides")]
+    public List<PieceVisualOverride> overrides = new();
+
     // ==========================================
-    // FLOOR VISUALS (¡Recuperado!)
+    // DATA STRUCTURES & SERIALIZABLES
     // ==========================================
     [System.Serializable]
     public class FloorVisualData
@@ -34,12 +39,6 @@ public class LevelGenerator : MonoBehaviour
         public GameObject defaultBlockPrefab;
     }
 
-    [Header("Floor Visuals")]
-    public List<FloorVisualData> floorVisuals = new();
-
-    // ==========================================
-    // OVERRIDES (¡Recuperado!)
-    // ==========================================
     [System.Serializable]
     public class PieceVisualOverride
     {
@@ -47,19 +46,9 @@ public class LevelGenerator : MonoBehaviour
         public GameObject customBlockPrefab;
     }
 
-    [Header("Overrides")]
-    public List<PieceVisualOverride> overrides = new();
-
     // ==========================================
-    // GRID INTERNOS
+    // UNITY LIFECYCLE (Order of execution)
     // ==========================================
-    private Dictionary<Vector3Int, Pieza> grid = new();
-    private ConstraintSystem constraints;
-
-    // ==========================================
-    // INIT
-    // ==========================================
-
     void Awake()
     {
         Instance = this;
@@ -71,6 +60,22 @@ public class LevelGenerator : MonoBehaviour
         GenerateLevel();
     }
 
+    // ==========================================
+    // CLEANUP METODS
+    // ==========================================
+    void ClearLevel()
+    {
+        foreach (var p in FindObjectsOfType<Pieza>())
+        {
+            Destroy(p.gameObject);
+        }
+
+        grid.Clear();
+    }
+
+    // ==========================================
+    // GENERATION METODS (Alphabetical)
+    // ==========================================
     public void GenerateLevel()
     {
         ClearLevel();
@@ -106,32 +111,15 @@ public class LevelGenerator : MonoBehaviour
         pieza.Initialize(dir); // Ya no requiere casteo peligroso
     }
 
-    // =========================
-    // VISUALS
-    // =========================
-
-    GameObject ResolvePrefab(Vector3Int pos)
+    // ==========================================
+    // GRID CORE METODS (Alphabetical)
+    // ==========================================
+    public bool CanMoveThrough(Vector3Int cell)
     {
-        // PRIORIDAD: override
-        foreach (var o in overrides)
-        {
-            if (o.position == pos && o.customBlockPrefab != null)
-                return o.customBlockPrefab;
-        }
-
-        // FLOOR
-        foreach (var f in floorVisuals)
-        {
-            if (f.yLevel == pos.y)
-                return f.defaultBlockPrefab;
-        }
-
-        return null;
+        // Si hay pieza → bloquea
+        return !grid.ContainsKey(cell);
     }
 
-    // =========================
-    // GRID CORE
-    // =========================
     public bool IsInsideGrid(Vector3Int pos)
     {
         return pos.x >= minBounds.x &&
@@ -140,10 +128,6 @@ public class LevelGenerator : MonoBehaviour
                pos.y <= maxBounds.y &&
                pos.z >= minBounds.z &&
                pos.z <= maxBounds.z;
-    }
-    public Vector3Int WorldToCell(Vector3 worldPos)
-    {
-        return Vector3Int.RoundToInt(worldPos);
     }
 
     public void MovePiece(Pieza pieza, Vector3Int oldPos, Vector3Int newPos)
@@ -170,32 +154,36 @@ public class LevelGenerator : MonoBehaviour
         pieza.transform.position = newPos;
     }
 
-    public bool CanMoveThrough(Vector3Int cell)
-    {
-        // Si hay pieza → bloquea
-        return !grid.ContainsKey(cell);
-    }
-
     public void PlacePiece(Pieza pieza, Vector3Int pos)
     {
         if (grid.ContainsKey(pos))
         {
-            Debug.Log("Se borra "+pos);
+            Debug.Log("Se borra " + pos);
             Destroy(grid[pos].gameObject);
             grid.Remove(pos);
         }
 
         grid[pos] = pieza;
-        
-        pieza.transform.position = pos;
 
-       
+        pieza.transform.position = pos;
     }
 
-    // =========================
-    // PLAYABLE AREA
-    // =========================
+    public void RemovePieceFromGrid(Vector3Int pos)
+    {
+        if (grid.ContainsKey(pos))
+        {
+            grid.Remove(pos);
+        }
+    }
 
+    public Vector3Int WorldToCell(Vector3 worldPos)
+    {
+        return Vector3Int.RoundToInt(worldPos);
+    }
+
+    // ==========================================
+    // PLAYABLE AREA METODS (Alphabetical)
+    // ==========================================
     public bool IsInsidePlayableArea(Vector3 pos)
     {
         Vector3Int p = Vector3Int.RoundToInt(pos);
@@ -208,30 +196,31 @@ public class LevelGenerator : MonoBehaviour
                p.z >= min.z && p.z <= max.z;
     }
 
-    // =========================
-    // MOVEMENT CHECK
-    // =========================
-
-
-    // =========================
-    // CLEANUP
-    // =========================
-
-    void ClearLevel()
+    // ==========================================
+    // VISUALS METODS (Alphabetical)
+    // ==========================================
+    GameObject ResolvePrefab(Vector3Int pos)
     {
-        foreach (var p in FindObjectsOfType<Pieza>())
+        // PRIORIDAD: override
+        foreach (var o in overrides)
         {
-            Destroy(p.gameObject);
+            if (o.position == pos && o.customBlockPrefab != null)
+                return o.customBlockPrefab;
         }
 
-        grid.Clear();
+        // FLOOR
+        foreach (var f in floorVisuals)
+        {
+            if (f.yLevel == pos.y)
+                return f.defaultBlockPrefab;
+        }
 
+        return null;
     }
 
-    // =========================
-    // CONSTRAINT SYSTEM
-    // =========================
-
+    // ==========================================
+    // CONSTRAINT SYSTEM (Subclass)
+    // ==========================================
     private class ConstraintSystem
     {
         // Guardamos la dirección asignada a cada línea. 
@@ -240,11 +229,41 @@ public class LevelGenerator : MonoBehaviour
         private Dictionary<Vector2Int, Pieza.MoveDirection> lineYDirection = new(); // Clave: (X, Z) -> Controla Up/Down
         private Dictionary<Vector2Int, Pieza.MoveDirection> lineZDirection = new(); // Clave: (X, Y) -> Controla Right/Left
 
-        public void ResetConstraints()
+        // METODOS EN ORDEN ALFABÉTICO
+        public void Apply(Vector3Int pos, Pieza.MoveDirection dir)
         {
-            lineXDirection.Clear();
-            lineYDirection.Clear();
-            lineZDirection.Clear();
+            Vector2Int fixedYZ = new(pos.y, pos.z);
+            Vector2Int fixedXZ = new(pos.x, pos.z);
+            Vector2Int fixedXY = new(pos.x, pos.y);
+
+            // Registramos la dirección de la línea si es la primera pieza en definirla
+            if (dir == Pieza.MoveDirection.Front || dir == Pieza.MoveDirection.Back)
+            {
+                if (!lineXDirection.ContainsKey(fixedYZ)) lineXDirection[fixedYZ] = dir;
+            }
+            else if (dir == Pieza.MoveDirection.Up || dir == Pieza.MoveDirection.Down)
+            {
+                if (!lineYDirection.ContainsKey(fixedXZ)) lineYDirection[fixedXZ] = dir;
+            }
+            else if (dir == Pieza.MoveDirection.Right || dir == Pieza.MoveDirection.Left)
+            {
+                if (!lineZDirection.ContainsKey(fixedXY)) lineZDirection[fixedXY] = dir;
+            }
+        }
+
+        private Vector3Int DirectionToVector(Pieza.MoveDirection dir)
+        {
+            // Mapeado geométrico exacto de los vectores según el método GetRotation() de tu script Pieza.cs
+            return dir switch
+            {
+                Pieza.MoveDirection.Front => new Vector3Int(1, 0, 0),   // +X (Rotación 0,0,0)
+                Pieza.MoveDirection.Back => new Vector3Int(-1, 0, 0),  // -X (Rotación 0,180,0)
+                Pieza.MoveDirection.Left => new Vector3Int(0, 0, 1),   // +Z (Rotación 0,270,0)
+                Pieza.MoveDirection.Right => new Vector3Int(0, 0, -1),  // -Z (Rotación 0,90,0)
+                Pieza.MoveDirection.Up => new Vector3Int(0, 1, 0),   // +Y (Rotación 0,0,90)
+                Pieza.MoveDirection.Down => new Vector3Int(0, -1, 0),  // -Y (Rotación 0,0,270)
+                _ => Vector3Int.zero
+            };
         }
 
         public Pieza.MoveDirection GetDirection(Vector3Int pos)
@@ -291,35 +310,6 @@ public class LevelGenerator : MonoBehaviour
             return options[Random.Range(0, options.Count)];
         }
 
-        public void Apply(Vector3Int pos, Pieza.MoveDirection dir)
-        {
-            Vector2Int fixedYZ = new(pos.y, pos.z);
-            Vector2Int fixedXZ = new(pos.x, pos.z);
-            Vector2Int fixedXY = new(pos.x, pos.y);
-
-            // Registramos la dirección de la línea si es la primera pieza en definirla
-            if (dir == Pieza.MoveDirection.Front || dir == Pieza.MoveDirection.Back)
-            {
-                if (!lineXDirection.ContainsKey(fixedYZ)) lineXDirection[fixedYZ] = dir;
-            }
-            else if (dir == Pieza.MoveDirection.Up || dir == Pieza.MoveDirection.Down)
-            {
-                if (!lineYDirection.ContainsKey(fixedXZ)) lineYDirection[fixedXZ] = dir;
-            }
-            else if (dir == Pieza.MoveDirection.Right || dir == Pieza.MoveDirection.Left)
-            {
-                if (!lineZDirection.ContainsKey(fixedXY)) lineZDirection[fixedXY] = dir;
-            }
-        }
-
-        private bool WouldCauseImmediateConflict(Vector3Int pos, Pieza.MoveDirection dir)
-        {
-            Vector3Int target = pos + DirectionToVector(dir);
-            if (!LevelGenerator.Instance.IsInsideGrid(target)) return false;
-            if (!LevelGenerator.Instance.CanMoveThrough(target)) return true;
-            return false;
-        }
-
         private Pieza.MoveDirection GetSafestFallback(Vector3Int pos)
         {
             int distToMinX = pos.x - LevelGenerator.Instance.minBounds.x;
@@ -333,19 +323,19 @@ public class LevelGenerator : MonoBehaviour
             return Pieza.MoveDirection.Left;
         }
 
-        private Vector3Int DirectionToVector(Pieza.MoveDirection dir)
+        public void ResetConstraints()
         {
-            // Mapeado geométrico exacto de los vectores según el método GetRotation() de tu script Pieza.cs
-            return dir switch
-            {
-                Pieza.MoveDirection.Front => new Vector3Int(1, 0, 0),   // +X (Rotación 0,0,0)
-                Pieza.MoveDirection.Back => new Vector3Int(-1, 0, 0),  // -X (Rotación 0,180,0)
-                Pieza.MoveDirection.Left => new Vector3Int(0, 0, 1),   // +Z (Rotación 0,270,0)
-                Pieza.MoveDirection.Right => new Vector3Int(0, 0, -1),  // -Z (Rotación 0,90,0)
-                Pieza.MoveDirection.Up => new Vector3Int(0, 1, 0),   // +Y (Rotación 0,0,90)
-                Pieza.MoveDirection.Down => new Vector3Int(0, -1, 0),  // -Y (Rotación 0,0,270)
-                _ => Vector3Int.zero
-            };
+            lineXDirection.Clear();
+            lineYDirection.Clear();
+            lineZDirection.Clear();
+        }
+
+        private bool WouldCauseImmediateConflict(Vector3Int pos, Pieza.MoveDirection dir)
+        {
+            Vector3Int target = pos + DirectionToVector(dir);
+            if (!LevelGenerator.Instance.IsInsideGrid(target)) return false;
+            if (!LevelGenerator.Instance.CanMoveThrough(target)) return true;
+            return false;
         }
     }
 }
